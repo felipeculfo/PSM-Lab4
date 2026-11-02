@@ -9,35 +9,49 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
-
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
-)
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
+    primary = AeroBluePrimary,
+    onPrimary = AeroOnPrimary,
+    primaryContainer = AeroPrimaryContainer,
+    onPrimaryContainer = AeroOnPrimaryContainer,
+    secondary = AeroSecondary,
+    onSecondary = AeroOnSecondary,
+    secondaryContainer = AeroSecondaryContainer,
+    onSecondaryContainer = AeroOnSecondaryContainer,
+    tertiary = AeroTertiary,
+    onTertiary = AeroOnTertiary,
+    tertiaryContainer = AeroTertiaryContainer,
+    surface = AeroSurfaceLight,
+    surfaceVariant = AeroSurfaceVariantLight
+)
 
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+private val DarkColorScheme = darkColorScheme(
+    primary = AeroBluePrimaryDark,
+    onPrimary = AeroOnPrimaryDark,
+    primaryContainer = AeroPrimaryContainerDark,
+    onPrimaryContainer = AeroOnPrimaryContainerDark,
+    secondary = AeroSecondaryDark,
+    onSecondary = AeroOnSecondaryDark,
+    secondaryContainer = AeroSecondaryContainerDark,
+    onSecondaryContainer = AeroOnSecondaryContainerDark,
+    tertiary = AeroTertiaryDark,
+    onTertiary = AeroOnTertiaryDark,
+    tertiaryContainer = AeroTertiaryContainerDark,
+    surface = AeroSurfaceDark,
+    surfaceVariant = AeroSurfaceVariantDark
 )
 
 @Composable
 fun Lab04Theme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    // Wyłączamy dynamicColor domyślnie, aby wymusić własną paletę Windows Aero (wymóg punktu 4.1 i 4.2)
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -45,9 +59,17 @@ fun Lab04Theme(
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
+    }
+
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            val insetsController = WindowCompat.getInsetsController(window, view)
+            insetsController.isAppearanceLightStatusBars = !darkTheme
+        }
     }
 
     MaterialTheme(
