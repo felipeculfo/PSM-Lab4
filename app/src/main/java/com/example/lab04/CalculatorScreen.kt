@@ -1,6 +1,7 @@
 package com.example.lab04
 
 import android.content.res.Configuration
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -241,7 +242,7 @@ private fun parseFactor(s: String): Double {
 
 @Composable
 fun CalculatorScreen(modifier: Modifier = Modifier) {
-    var expression by remember { mutableStateOf("") }
+    var expression by rememberSaveable { mutableStateOf("") }
 
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
