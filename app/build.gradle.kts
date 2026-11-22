@@ -61,4 +61,7 @@ dependencies {
     // Zależności JUnit i AndroidX Test
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+
+    //mxParser
+    implementation("org.mariuszgromada.math:MathParser.org-mXparser:6.1.2")
 }

@@ -1,6 +1,7 @@
 package com.example.lab04
 
 import android.content.res.Configuration
+import android.util.Log
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -21,78 +22,201 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
+import org.mariuszgromada.math.mxparser.Expression
+import java.math.BigDecimal
+import java.math.RoundingMode
+import androidx.compose.runtime.saveable.listSaver
 
 enum class ButtonRole {
     DIGIT, OPERATOR, ACTION, PARENTHESIS, SCIENTIFIC
 }
 
+data class CalculatorUiState(
+    val expression: String = "",
+    val previousExpression: String = ""
+)
+
+private val CalculatorUiStateSaver = listSaver<CalculatorUiState, String>(
+    save = { state -> listOf(state.expression, state.previousExpression) },
+    restore = { savedList ->
+        CalculatorUiState(
+            expression = savedList.getOrElse(0) { "" },
+            previousExpression = savedList.getOrElse(1) { "" }
+        )
+    }
+)
+
 data class CalcButtonSpec(
     val label: String,
     val role: ButtonRole,
-    val onClickAction: (currentText: String) -> String
+    val onClickAction: (CalculatorUiState) -> CalculatorUiState
 )
+
+private object MathExpressionEvaluator {
+    private const val TAG = "MxParserEval"
+
+    fun normalizeForMxParser(expression: String): String {
+        return expression
+            .replace("×", "*")
+            .replace("÷", "/")
+            .replace("√", "sqrt")
+            .replace("π", "pi")
+            .replace(",", ".")
+    }
+
+    fun evaluate(state: CalculatorUiState): CalculatorUiState {
+        val currentExpression = state.expression
+        if (currentExpression.isBlank()) return state
+
+        val prepared = normalizeForMxParser(currentExpression)
+        Log.d(TAG, "Przekazywane do mXparser: '$prepared'")
+
+        val exp = Expression(prepared)
+        val rawResult = exp.calculate()
+        Log.d(TAG, "Wynik calculate(): $rawResult | syntax=${exp.checkSyntax()}")
+
+        if (rawResult.isNaN() || !rawResult.isFinite()) {
+            return state
+        }
+
+        val rounded = BigDecimal.valueOf(rawResult)
+            .setScale(10, RoundingMode.HALF_UP)
+            .stripTrailingZeros()
+
+        val formatted = if (rounded.scale() <= 0) {
+            rounded.toPlainString()
+        } else {
+            rounded.toPlainString().replace(".", ",")
+        }
+
+        val finalResult = if (formatted == "-0") "0" else formatted
+        return CalculatorUiState(
+            expression = finalResult,
+            previousExpression = currentExpression
+        )
+    }
+}
 
 val calculatorButtons = listOf(
     listOf(
-        CalcButtonSpec("C", ButtonRole.ACTION) { "" },
-        CalcButtonSpec("(", ButtonRole.PARENTHESIS) { text -> text + "(" },
-        CalcButtonSpec(")", ButtonRole.PARENTHESIS) { text -> text + ")" },
-        CalcButtonSpec("÷", ButtonRole.OPERATOR) { text -> appendOperator(text, "÷") }
+        CalcButtonSpec("C", ButtonRole.ACTION) { CalculatorUiState() },
+        CalcButtonSpec("(", ButtonRole.PARENTHESIS) { state ->
+            state.copy(expression = state.expression + "(", previousExpression = "")
+        },
+        CalcButtonSpec(")", ButtonRole.PARENTHESIS) { state ->
+            state.copy(expression = state.expression + ")", previousExpression = "")
+        },
+        CalcButtonSpec("÷", ButtonRole.OPERATOR) { state ->
+            state.copy(expression = appendOperator(state.expression, "÷"), previousExpression = "")
+        }
     ),
     listOf(
-        CalcButtonSpec("7", ButtonRole.DIGIT) { text -> text + "7" },
-        CalcButtonSpec("8", ButtonRole.DIGIT) { text -> text + "8" },
-        CalcButtonSpec("9", ButtonRole.DIGIT) { text -> text + "9" },
-        CalcButtonSpec("×", ButtonRole.OPERATOR) { text -> appendOperator(text, "×") }
+        CalcButtonSpec("7", ButtonRole.DIGIT) { state ->
+            state.copy(expression = state.expression + "7", previousExpression = "")
+        },
+        CalcButtonSpec("8", ButtonRole.DIGIT) { state ->
+            state.copy(expression = state.expression + "8", previousExpression = "")
+        },
+        CalcButtonSpec("9", ButtonRole.DIGIT) { state ->
+            state.copy(expression = state.expression + "9", previousExpression = "")
+        },
+        CalcButtonSpec("×", ButtonRole.OPERATOR) { state ->
+            state.copy(expression = appendOperator(state.expression, "×"), previousExpression = "")
+        }
     ),
     listOf(
-        CalcButtonSpec("4", ButtonRole.DIGIT) { text -> text + "4" },
-        CalcButtonSpec("5", ButtonRole.DIGIT) { text -> text + "5" },
-        CalcButtonSpec("6", ButtonRole.DIGIT) { text -> text + "6" },
-        CalcButtonSpec("-", ButtonRole.OPERATOR) { text -> appendOperator(text, "-") }
+        CalcButtonSpec("4", ButtonRole.DIGIT) { state ->
+            state.copy(expression = state.expression + "4", previousExpression = "")
+        },
+        CalcButtonSpec("5", ButtonRole.DIGIT) { state ->
+            state.copy(expression = state.expression + "5", previousExpression = "")
+        },
+        CalcButtonSpec("6", ButtonRole.DIGIT) { state ->
+            state.copy(expression = state.expression + "6", previousExpression = "")
+        },
+        CalcButtonSpec("-", ButtonRole.OPERATOR) { state ->
+            state.copy(expression = appendOperator(state.expression, "-"), previousExpression = "")
+        }
     ),
     listOf(
-        CalcButtonSpec("1", ButtonRole.DIGIT) { text -> text + "1" },
-        CalcButtonSpec("2", ButtonRole.DIGIT) { text -> text + "2" },
-        CalcButtonSpec("3", ButtonRole.DIGIT) { text -> text + "3" },
-        CalcButtonSpec("+", ButtonRole.OPERATOR) { text -> appendOperator(text, "+") }
+        CalcButtonSpec("1", ButtonRole.DIGIT) { state ->
+            state.copy(expression = state.expression + "1", previousExpression = "")
+        },
+        CalcButtonSpec("2", ButtonRole.DIGIT) { state ->
+            state.copy(expression = state.expression + "2", previousExpression = "")
+        },
+        CalcButtonSpec("3", ButtonRole.DIGIT) { state ->
+            state.copy(expression = state.expression + "3", previousExpression = "")
+        },
+        CalcButtonSpec("+", ButtonRole.OPERATOR) { state ->
+            state.copy(expression = appendOperator(state.expression, "+"), previousExpression = "")
+        }
     ),
     listOf(
-        CalcButtonSpec("0", ButtonRole.DIGIT) { text -> text + "0" },
-        CalcButtonSpec(",", ButtonRole.DIGIT) { text -> appendDecimal(text) },
-        CalcButtonSpec("⌫", ButtonRole.ACTION) { text -> if (text.isNotEmpty()) text.dropLast(1) else "" },
-        CalcButtonSpec("=", ButtonRole.OPERATOR) { text -> calculateResult(text) }
+        CalcButtonSpec("0", ButtonRole.DIGIT) { state ->
+            state.copy(expression = state.expression + "0", previousExpression = "")
+        },
+        CalcButtonSpec(",", ButtonRole.DIGIT) { state ->
+            state.copy(expression = appendDecimal(state.expression), previousExpression = "")
+        },
+        CalcButtonSpec("⌫", ButtonRole.ACTION) { state ->
+            val nextExpr = if (state.expression.isNotEmpty()) state.expression.dropLast(1) else ""
+            state.copy(expression = nextExpr, previousExpression = "")
+        },
+        CalcButtonSpec("=", ButtonRole.OPERATOR) { state ->
+            MathExpressionEvaluator.evaluate(state)
+        }
     )
 )
 
 val scientificButtons = listOf(
     listOf(
-        CalcButtonSpec("√", ButtonRole.SCIENTIFIC) { text -> text + "√(" },
-        CalcButtonSpec("^", ButtonRole.SCIENTIFIC) { text -> text + "^" }
+        CalcButtonSpec("√", ButtonRole.SCIENTIFIC) { state ->
+            state.copy(expression = state.expression + "√(", previousExpression = "")
+        },
+        CalcButtonSpec("^", ButtonRole.SCIENTIFIC) { state ->
+            state.copy(expression = state.expression + "^", previousExpression = "")
+        }
     ),
     listOf(
-        CalcButtonSpec("sin", ButtonRole.SCIENTIFIC) { text -> text + "sin(" },
-        CalcButtonSpec("cos", ButtonRole.SCIENTIFIC) { text -> text + "cos(" }
+        CalcButtonSpec("sin", ButtonRole.SCIENTIFIC) { state ->
+            state.copy(expression = state.expression + "sin(", previousExpression = "")
+        },
+        CalcButtonSpec("cos", ButtonRole.SCIENTIFIC) { state ->
+            state.copy(expression = state.expression + "cos(", previousExpression = "")
+        }
     ),
     listOf(
-        CalcButtonSpec("tan", ButtonRole.SCIENTIFIC) { text -> text + "tan(" },
-        CalcButtonSpec("log", ButtonRole.SCIENTIFIC) { text -> text + "log(" }
+        CalcButtonSpec("tan", ButtonRole.SCIENTIFIC) { state ->
+            state.copy(expression = state.expression + "tan(", previousExpression = "")
+        },
+        CalcButtonSpec("log", ButtonRole.SCIENTIFIC) { state ->
+            state.copy(expression = state.expression + "log(", previousExpression = "")
+        }
     ),
     listOf(
-        CalcButtonSpec("π", ButtonRole.SCIENTIFIC) { text -> text + "π" },
-        CalcButtonSpec("e", ButtonRole.SCIENTIFIC) { text -> text + "e" }
+        CalcButtonSpec("π", ButtonRole.SCIENTIFIC) { state ->
+            state.copy(expression = state.expression + "π", previousExpression = "")
+        },
+        CalcButtonSpec("e", ButtonRole.SCIENTIFIC) { state ->
+            state.copy(expression = state.expression + "e", previousExpression = "")
+        }
     ),
     listOf(
-        CalcButtonSpec("ln", ButtonRole.SCIENTIFIC) { text -> text + "ln(" },
-        CalcButtonSpec("abs", ButtonRole.SCIENTIFIC) { text -> text + "abs(" }
+        CalcButtonSpec("ln", ButtonRole.SCIENTIFIC) { state ->
+            state.copy(expression = state.expression + "ln(", previousExpression = "")
+        },
+        CalcButtonSpec("abs", ButtonRole.SCIENTIFIC) { state ->
+            state.copy(expression = state.expression + "abs(", previousExpression = "")
+        }
     )
 )
 
@@ -121,128 +245,11 @@ fun appendDecimal(text: String): String {
     }
 }
 
-fun calculateResult(expression: String): String {
-    if (expression.isEmpty()) return ""
-    return try {
-        // Zabezpieczone obliczenia podstawowe i naukowe
-        val sanitized = expression
-            .replace("×", "*")
-            .replace("÷", "/")
-            .replace("√", "sqrt")
-            .replace("π", Math.PI.toString())
-            .replace("e", Math.E.toString())
-            .replace(",", ".")
-
-        val result = evalSimple(sanitized)
-        if (result % 1.0 == 0.0) {
-            result.toLong().toString()
-        } else {
-            result.toString().replace(".", ",")
-        }
-    } catch (e: Exception) {
-        "Błąd"
-    }
-}
-
-// Bezpieczny evaluator zoptymalizowany pod kątem stabilności laboratoriów
-private fun evalSimple(expr: String): Double {
-    // Prosty evaluator bazujący na sparsowanym ciągu znaków lub bibliotece standardowej
-    val cleanExpr = expr.replace(" ", "")
-
-    // Obsługa podstawowych funkcji jednoargumentowych i stałych
-    if (cleanExpr.startsWith("sqrt(")) {
-        val inner = cleanExpr.substring(5, cleanExpr.length - 1)
-        return Math.sqrt(evalSimple(inner))
-    }
-    if (cleanExpr.startsWith("sin(")) {
-        val inner = cleanExpr.substring(4, cleanExpr.length - 1)
-        return Math.sin(Math.toRadians(evalSimple(inner)))
-    }
-    if (cleanExpr.startsWith("cos(")) {
-        val inner = cleanExpr.substring(4, cleanExpr.length - 1)
-        return Math.cos(Math.toRadians(evalSimple(inner)))
-    }
-    if (cleanExpr.startsWith("tan(")) {
-        val inner = cleanExpr.substring(4, cleanExpr.length - 1)
-        return Math.tan(Math.toRadians(evalSimple(inner)))
-    }
-    if (cleanExpr.startsWith("log(")) {
-        val inner = cleanExpr.substring(4, cleanExpr.length - 1)
-        return Math.log10(evalSimple(inner))
-    }
-    if (cleanExpr.startsWith("ln(")) {
-        val inner = cleanExpr.substring(3, cleanExpr.length - 1)
-        return Math.log(evalSimple(inner))
-    }
-    if (cleanExpr.startsWith("abs(")) {
-        val inner = cleanExpr.substring(4, cleanExpr.length - 1)
-        return Math.abs(evalSimple(inner))
-    }
-
-    // Podstawowy parser działań binarnych (+, -, *, /, ^)
-    return parseAddSubtract(cleanExpr)
-}
-
-private fun parseAddSubtract(s: String): Double {
-    var pos = s.length - 1
-    var parenCount = 0
-    while (pos >= 0) {
-        when (s[pos]) {
-            ')' -> parenCount++
-            '(' -> parenCount--
-            '+', '-' -> {
-                if (parenCount == 0 && pos > 0 && s[pos-1] !in "+-*/^(") {
-                    val left = parseAddSubtract(s.substring(0, pos))
-                    val right = parseMultiplyDivide(s.substring(pos + 1))
-                    return if (s[pos] == '+') left + right else left - right
-                }
-            }
-        }
-        pos--
-    }
-    return parseMultiplyDivide(s)
-}
-
-private fun parseMultiplyDivide(s: String): Double {
-    var pos = s.length - 1
-    var parenCount = 0
-    while (pos >= 0) {
-        when (s[pos]) {
-            ')' -> parenCount++
-            '(' -> parenCount--
-            '*', '/' -> {
-                if (parenCount == 0) {
-                    val left = parseMultiplyDivide(s.substring(0, pos))
-                    val right = parsePower(s.substring(pos + 1))
-                    return if (s[pos] == '*') left * right else left / right
-                }
-            }
-        }
-        pos--
-    }
-    return parsePower(s)
-}
-
-private fun parsePower(s: String): Double {
-    val idx = s.indexOf('^')
-    if (idx != -1) {
-        val left = parseFactor(s.substring(0, idx))
-        val right = parsePower(s.substring(idx + 1))
-        return Math.pow(left, right)
-    }
-    return parseFactor(s)
-}
-
-private fun parseFactor(s: String): Double {
-    if (s.startsWith("(") && s.endsWith(")")) {
-        return parseAddSubtract(s.substring(1, s.length - 1))
-    }
-    return s.toDoubleOrNull() ?: 0.0
-}
-
 @Composable
 fun CalculatorScreen(modifier: Modifier = Modifier) {
-    var expression by rememberSaveable { mutableStateOf("") }
+    var uiState by rememberSaveable(stateSaver = CalculatorUiStateSaver) {
+        mutableStateOf(CalculatorUiState())
+    }
 
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -254,7 +261,8 @@ fun CalculatorScreen(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         DisplayField(
-            expression = expression,
+            expression = uiState.expression,
+            previousExpression = uiState.previousExpression,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(0.8f)
@@ -269,14 +277,14 @@ fun CalculatorScreen(modifier: Modifier = Modifier) {
             ) {
                 CalculatorGrid(
                     buttonRows = calculatorButtons,
-                    onButtonClick = { action -> expression = action(expression) },
+                    onButtonClick = { action -> uiState = action(uiState) },
                     modifier = Modifier
                         .fillMaxHeight()
                         .weight(2f)
                 )
                 CalculatorGrid(
                     buttonRows = scientificButtons,
-                    onButtonClick = { action -> expression = action(expression) },
+                    onButtonClick = { action -> uiState = action(uiState) },
                     modifier = Modifier
                         .fillMaxHeight()
                         .weight(1f)
@@ -285,7 +293,7 @@ fun CalculatorScreen(modifier: Modifier = Modifier) {
         } else {
             CalculatorGrid(
                 buttonRows = calculatorButtons,
-                onButtonClick = { action -> expression = action(expression) },
+                onButtonClick = { action -> uiState = action(uiState) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(2.2f)
@@ -297,9 +305,19 @@ fun CalculatorScreen(modifier: Modifier = Modifier) {
 @Composable
 fun DisplayField(
     expression: String,
+    previousExpression: String,
     modifier: Modifier = Modifier
 ) {
-    val scrollState = rememberScrollState()
+    val historyScrollState = rememberScrollState()
+    val expressionScrollState = rememberScrollState()
+
+    LaunchedEffect(expression) {
+        expressionScrollState.animateScrollTo(expressionScrollState.maxValue)
+    }
+
+    LaunchedEffect(previousExpression) {
+        historyScrollState.animateScrollTo(historyScrollState.maxValue)
+    }
 
     Surface(
         modifier = modifier,
@@ -309,23 +327,47 @@ fun DisplayField(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(12.dp),
-            contentAlignment = Alignment.BottomEnd
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            contentAlignment = Alignment.CenterEnd
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(scrollState, reverseScrolling = true),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Text(
-                    text = expression.ifEmpty { "0" },
-                    fontSize = 32.sp,
-                    textAlign = TextAlign.End,
-                    maxLines = 1,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (previousExpression.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(historyScrollState),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        Text(
+                            text = previousExpression,
+                            fontSize = 16.sp,
+                            lineHeight = 20.sp,
+                            softWrap = false,
+                            maxLines = 1,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(expressionScrollState),
+                    contentAlignment = Alignment.CenterEnd
+                ) {
+                    Text(
+                        text = expression.ifEmpty { "0" },
+                        fontSize = 28.sp,
+                        lineHeight = 34.sp,
+                        softWrap = false,
+                        maxLines = 1,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
@@ -334,7 +376,7 @@ fun DisplayField(
 @Composable
 fun CalculatorGrid(
     buttonRows: List<List<CalcButtonSpec>>,
-    onButtonClick: ((String) -> String) -> Unit,
+    onButtonClick: ((CalculatorUiState) -> CalculatorUiState) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
