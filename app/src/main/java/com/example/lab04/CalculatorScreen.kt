@@ -172,7 +172,16 @@ val calculatorButtons = listOf(
             state.copy(expression = nextExpr, previousExpression = "")
         },
         CalcButtonSpec("=", ButtonRole.OPERATOR) { state ->
-            MathExpressionEvaluator.evaluate(state)
+            val currentExpression = state.expression
+            val evaluated = CalculatorEngine.evaluateExpression(currentExpression)
+            if (evaluated != null) {
+                state.copy(
+                    expression = evaluated,
+                    previousExpression = currentExpression
+                )
+            } else {
+                state
+            }
         }
     )
 )
