@@ -353,8 +353,10 @@ fun DisplayField(
                     ) {
                         Text(
                             text = previousExpression,
-                            fontSize = 16.sp,
-                            lineHeight = 20.sp,
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontSize = 16.sp,
+                                lineHeight = 20.sp
+                            ),
                             softWrap = false,
                             maxLines = 1,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
@@ -370,8 +372,7 @@ fun DisplayField(
                 ) {
                     Text(
                         text = expression.ifEmpty { "0" },
-                        fontSize = 28.sp,
-                        lineHeight = 34.sp,
+                        style = MaterialTheme.typography.headlineMedium,
                         softWrap = false,
                         maxLines = 1,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -446,7 +447,7 @@ fun CalculatorButton(
     ) {
         Text(
             text = spec.label,
-            fontSize = 18.sp
+            style = MaterialTheme.typography.labelLarge
         )
     }
 }
